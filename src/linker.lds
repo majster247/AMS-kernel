@@ -71,4 +71,8 @@ SECTIONS
         *(.eh_frame*)
         *(.note .note.*)
     }
+
+    . = ALIGN(16);
+    . += 0x4000; /* Rezerwujemy 16 KB przestrzeni na stos jądra */
+    stack_top = .;
 }

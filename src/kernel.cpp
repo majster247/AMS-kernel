@@ -2,17 +2,12 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "../limine/limine.h"
-
-
-
-
-#ifdef __cplusplus
-#define restrict __restrict
-#endif
-
-#define COM1 0x3f8
-char cmd_buffer[256];
-size_t buffer_index = 0;
+#include "fonts/font.hpp"
+#include "../include/gdt.h"
+#include "../include/idt.h"
+#include "../include/io.h"
+#include "../include/klib.h"
+#include "../include/serial.h"
 
 extern "C" {
 
@@ -32,138 +27,28 @@ static volatile uint64_t limine_requests_start_marker[] = LIMINE_REQUESTS_START_
 __attribute__((used, section(".limine_requests_end")))
 static volatile uint64_t limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
-void *memcpy(void *restrict dest, const void *restrict src, size_t n) {
-    uint8_t *restrict pdest = (uint8_t *restrict)dest;
-    const uint8_t *restrict psrc = (const uint8_t *restrict)src;
-    for (size_t i = 0; i < n; i++) pdest[i] = psrc[i];
-    return dest;
+void hlt() {
+    asm volatile ("hlt");
 }
 
-void *memset(void *s, int c, size_t n) {
-    uint8_t *p = (uint8_t *)s;
-    for (size_t i = 0; i < n; i++) p[i] = (uint8_t)c;
-    return s;
-}
+void draw_char(limine_framebuffer* fb, char c, int cx, int cy, uint32_t fg_color, uint32_t bg_color) {
+    psf1_header* font = (psf1_header*)_binary_font_psf_start;
+    uint8_t* font_buffer = (uint8_t*)_binary_font_psf_start + sizeof(psf1_header);
+    uint8_t* glyph = font_buffer + (c * font->char_size);
 
-void *memmove(void *dest, const void *src, size_t n) {
-    uint8_t *pdest = (uint8_t *)dest;
-    const uint8_t *psrc = (const uint8_t *)src;
-    if (psrc > pdest) {
-        for (size_t i = 0; i < n; i++) pdest[i] = psrc[i];
-    } else if (psrc < pdest) {
-        for (size_t i = n; i > 0; i--) pdest[i-1] = psrc[i-1];
-    }
-    return dest;
-}
+    uint32_t fb_pitch_pixels = fb->pitch / 4;
+    uint32_t* fb_address = (uint32_t*)fb->address;
 
-int memcmp(const void *s1, const void *s2, size_t n) {
-    const uint8_t *p1 = (const uint8_t *)s1;
-    const uint8_t *p2 = (const uint8_t *)s2;
-    for (size_t i = 0; i < n; i++) {
-        if (p1[i] != p2[i]) return p1[i] < p2[i] ? -1 : 1;
-    }
-    return 0;
-}
-
-
-void outb(uint16_t port, uint8_t val) {
-    asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-
-uint8_t inb(uint16_t port) {
-    uint8_t ret;
-    asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
-    return ret;
-}
-
-
-void init_serial() {
-    outb(COM1 + 1, 0x00);
-    outb(COM1 + 3, 0x80); 
-    outb(COM1 + 0, 0x03);
-    outb(COM1 + 1, 0x00);
-    outb(COM1 + 3, 0x03); 
-    outb(COM1 + 2, 0xC7); 
-    outb(COM1 + 4, 0x0B); 
-}
-
-
-void write_serial(char a) {
-    outb(COM1, a);
-}
-
-
-void print_serial(const char* str) {
-    for (int i = 0; str[i] != '\0'; i++) {
-        write_serial(str[i]);
+    for (int y = 0; y < font->char_size; y++) {
+        for (int x = 0; x < 8; x++) {
+            if ((glyph[y] << x) & 0x80) {
+                fb_address[(cy + y) * fb_pitch_pixels + (cx + x)] = fg_color;
+            } else {
+                fb_address[(cy + y) * fb_pitch_pixels + (cx + x)] = bg_color;
+            }
+        }
     }
 }
-
-
-void print_hex(uint64_t val) {
-    const char hex[] = "0123456789ABCDEF";
-    char buf[17];
-    int i = 15;
-    buf[16] = '\0';
-    if (val == 0) print_serial("0");
-    while (val > 0) {
-        buf[i--] = hex[val % 16];
-        val /= 16;
-    }
-    print_serial(&buf[i + 1]);
-}
-
-void print_num(uint64_t val) {
-    char buf[21];
-    int i = 19;
-    buf[20] = '\0';
-    if (val == 0) print_serial("0");
-    while (val > 0) {
-        buf[i--] = (val % 10) + '0';
-        val /= 10;
-    }
-    print_serial(&buf[i + 1]);
-}
-
-
-
-int strcmp(const char* s1, const char* s2) {
-    while (*s1 && (*s1 == *s2)) { s1++; s2++; }
-    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
-}
-
-
-void process_command(char* cmd) {
-    if (strcmp(cmd, "help") == 0) {
-        print_serial("Dostepne komendy: help, clear, status\n");
-    } else if (strcmp(cmd, "status") == 0) {
-        print_serial("Kernel dziala w trybie 64-bit (long mode)\n");
-    } else {
-        print_serial("Nieznana komenda: ");
-        print_serial(cmd);
-        print_serial("\n");
-    }
-}
-
-
-void add_to_buffer(char c) {
-    if (c == '\r' || c == '\n') {
-        cmd_buffer[buffer_index] = '\0';
-        process_command(cmd_buffer);
-        buffer_index = 0;
-        print_serial("AMS> "); 
-    } else if (c == 0x08) { 
-        if (buffer_index > 0) buffer_index--;
-    } else {
-        cmd_buffer[buffer_index++] = c;
-    }
-}
-
-
-//-------------------------------------------------------------------
-// Main kernel function
-//------------------------------------------------------------------
-
 
 void kmain(void) {
     init_serial();
@@ -174,26 +59,50 @@ void kmain(void) {
     }
     
     print_serial("Framebuffer found!\n");
-
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
-
-
-    print_serial("Framebuffer details:\n");
-    print_serial("Width: ");
+    print_serial("\nFramebuffer resolution: ");
     print_num(fb->width);
-    print_serial("\nHeight: ");
+    print_serial("x");
     print_num(fb->height);
-    print_serial("\nPitch: ");
+    print_serial("\nFramebuffer pitch: ");
     print_num(fb->pitch);
-    print_serial("\nBPP: ");
-    print_num(fb->bpp);
+    print_serial("\nInitializing GDT and IDT...\n");
 
+    gdt_init();
+    print_serial("GDT initialized!\n");
+    idt_init();
+    print_serial("IDT initialized!\n");
+
+    // Przepłukanie bufora klawiatury
+    while (inb(0x64) & 1) {
+        inb(0x60);
+    }
+
+    // Odmaskowujemy TYLKO klawiaturę (IRQ1). 
+    // Bitowo: 0xFD to 11111101 (włączony tylko bit 1, bit 0 od zegara jest wyłączony!)
+    outb(0x21, 0xFD); 
+    outb(0xA1, 0xFF); // Slave PIC całkowicie wyłączony
+    
+    print_serial("Keyboard IRQ unmasked, PIT timer masked!\n");
+
+    asm volatile("sti");
+    print_serial("Interrupts enabled!\n");
+
+    // Rysowanie promptu na ekranie
+    const char* msg = "majster@AMS-kernel:# ";
+    int x = 10;
+    for(int i = 0; msg[i] != '\0'; i++) {
+        draw_char(fb, msg[i], x, 10, 0xFFFFFFFF, 0x00000000);
+        x += 8;
+    }
+
+    print_serial("\n[Kernel] System gotowy. Czekam na przerwania...\n");
+
+    // Prawidłowa pętla bez końca
     while (1) {
-        if (inb(COM1 + 5) & 1) {
-            char c = inb(COM1);
-            write_serial(c); 
-            add_to_buffer(c);
-        }
+        asm volatile("hlt");
     }
 }
-} 
+}
+
+//TODO: naprawić obsługę przerwań w idt.cpp celem dodania obsługi klawiatury (i innych IRQ) oraz poprawić panic handler, żeby wyświetlał więcej informacji o błędzie (numer przerwania, kod błędu jeśli jest, itp.)
