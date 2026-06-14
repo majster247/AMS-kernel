@@ -2,7 +2,7 @@
 .global isr\num
 isr\num:
     pushq $0                 # Sztuczny kod błędu (0)
-    pushq \num               # Numer przerwania
+    pushq $\num               # Numer przerwania
     jmp interrupt_common
 .endm
 
@@ -10,7 +10,7 @@ isr\num:
 .global isr\num
 isr\num:
     # Procesor sam wypycha kod błędu na stos
-    pushq \num               # Numer przerwania
+    pushq $\num               # Numer przerwania
     jmp interrupt_common
 .endm
 
@@ -18,7 +18,7 @@ isr\num:
 .global irq\num
 irq\num:
     pushq $0                 # Sztuczny kod błędu (0)
-    pushq \int_no            # Numer mapowanego przerwania w IDT (32 + num)
+    pushq $\int_no            # Numer mapowanego przerwania w IDT (32 + num)
     jmp interrupt_common
 .endm
 
@@ -107,6 +107,8 @@ interrupt_common:
     # Przekazujemy go do C++ jako pierwszy argument (rejestr RDI wg x86_64 ABI)
     movq %rsp, %rdi
 
+    cld
+
     # Wywołujemy główny dyspozytor przerwiań z pliku idt.cpp
     .extern interrupt_handler
     call interrupt_handler
@@ -118,7 +120,6 @@ interrupt_common:
     popq %r12
     popq %r11
     popq %r10
-    popq %r11   # Nadpisujemy r11 odtworzonym r11 z racji braku zmian
     popq %r9
     popq %r8
     popq %rbp

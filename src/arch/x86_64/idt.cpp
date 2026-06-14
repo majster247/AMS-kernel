@@ -67,6 +67,14 @@ void pic_remap() {
 extern "C" void keyboard_handler(registers* r);
 
 extern "C" void interrupt_handler(registers* r) {
+
+    // KROK DEBUGOWANIA: Logujemy absolutnie KAŻDE wywołanie przerwania sprzętowego
+    if (r->int_no >= 32 && r->int_no <= 47) {
+        print_serial("[IRQ DETECTED] Odebrano przerwanie sprzętowe numer: ");
+        print_num(r->int_no);
+        print_serial("\n");
+    }
+
     // 1. Jeśli to wyjątek procesora (0-31)
     if (r->int_no < 32) {
         print_serial("\n[PANIC] Wyjatek procesora: ");
@@ -98,7 +106,9 @@ extern "C" void interrupt_handler(registers* r) {
 }
 
 extern "C" void idt_init() {
-    memset(idt, 0, sizeof(idt));
+    for (size_t i = 0; i < 256; i++) {
+        idt_set_gate(i, 0, 0, 0, 0); // Inicjalizacja wszystkich wpisów IDT na "pusty" stan
+    }
 
     pic_remap();
 
@@ -112,13 +122,13 @@ extern "C" void idt_init() {
     idt_set_gate(5,  (uint64_t)isr5,  0x08, 0x8E, 0);
     idt_set_gate(6,  (uint64_t)isr6,  0x08, 0x8E, 0);
     idt_set_gate(7,  (uint64_t)isr7,  0x08, 0x8E, 0);
-    idt_set_gate(8,  (uint64_t)isr8,  0x08, 0x8E, 1); // Double Fault na bezpiecznym stosie IST1
+    idt_set_gate(8,  (uint64_t)isr8,  0x08, 0x8E, 0); // Double Fault na bezpiecznym stosie IST1
     idt_set_gate(9,  (uint64_t)isr9,  0x08, 0x8E, 0);
     idt_set_gate(10, (uint64_t)isr10, 0x08, 0x8E, 0);
     idt_set_gate(11, (uint64_t)isr11, 0x08, 0x8E, 0);
     idt_set_gate(12, (uint64_t)isr12, 0x08, 0x8E, 0);
-    idt_set_gate(13, (uint64_t)isr13, 0x08, 0x8E, 1); // General Protection Fault na IST1
-    idt_set_gate(14, (uint64_t)isr14, 0x08, 0x8E, 1); // Page Fault na IST1
+    idt_set_gate(13, (uint64_t)isr13, 0x08, 0x8E, 0); // General Protection Fault na IST1
+    idt_set_gate(14, (uint64_t)isr14, 0x08, 0x8E, 0); // Page Fault na IST1
     idt_set_gate(15, (uint64_t)isr15, 0x08, 0x8E, 0);
     idt_set_gate(16, (uint64_t)isr16, 0x08, 0x8E, 0);
     idt_set_gate(17, (uint64_t)isr17, 0x08, 0x8E, 0);
@@ -139,7 +149,7 @@ extern "C" void idt_init() {
 
     // Rejestracja przerwiań sprzętowych IRQ (32-47)
     idt_set_gate(32, (uint64_t)irq0,  0x08, 0x8E, 0); // Timer
-    idt_set_gate(33, (uint64_t)irq1,  0x08, 0x8E, 0); // Klawiatura
+    idt_set_gate(33, (uint64_t)irq1,  0x08, 0x8E, 1); // Klawiatura
     idt_set_gate(34, (uint64_t)irq2,  0x08, 0x8E, 0);
     idt_set_gate(35, (uint64_t)irq3,  0x08, 0x8E, 0);
     idt_set_gate(36, (uint64_t)irq4,  0x08, 0x8E, 0);

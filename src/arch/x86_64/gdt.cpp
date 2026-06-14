@@ -27,7 +27,11 @@ extern "C" uint8_t stack_top;
 extern "C" void gdt_init() {
     print_serial("Initializing GDT...\n");
     print_serial("Clearing GDT entries...\n");
-    memset(gdt_real, 0, sizeof(gdt_real));
+
+    for (size_t i = 0; i < (sizeof(gdt_real) / sizeof(gdt_real[0])); i++) {
+        gdt_real[i] = 0;
+    }
+
     print_serial("Setting up GDT entries...\n");
 
     gdt_real[0] = 0;                  // Null descriptor
@@ -47,7 +51,10 @@ extern "C" void gdt_init() {
     uint64_t tss_base = (uint64_t)&system_tss;
     uint32_t tss_limit = sizeof(tss_entry) - 1;
 
-    memset(&system_tss, 0, sizeof(system_tss));
+   for (size_t i = 0; i < sizeof(tss_entry) / sizeof(uint64_t); i++) {
+        ((uint64_t*)&system_tss)[i] = 0;
+    }
+
     print_serial("TSS structure cleared.\n");
     
     // Przypisanie stosu jądra (używamy przekazanego stack_top)

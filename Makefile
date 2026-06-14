@@ -5,7 +5,7 @@ LD := x86_64-elf-ld
 
 # Flagi kompilacji - dodaliśmy wyszukiwanie nagłówków z folderu include
 CFLAGS := -g -O2 -pipe -Wall -Wextra -std=c++20 -ffreestanding -fno-stack-protector \
-          -fno-exceptions -fno-rtti -mno-red-zone -mcmodel=kernel -I include -I src
+          -fno-exceptions -fno-rtti -mno-red-zone -mcmodel=kernel -I include -I src -fno-builtin -mgeneral-regs-only
 
 LDFLAGS := -T src/linker.lds -nostdlib -z max-page-size=0x1000
 
@@ -47,8 +47,7 @@ iso: bin/$(OUTPUT)
 	./limine/limine bios-install ams.iso 
 
 run: iso
-	qemu-system-x86_64 -cdrom ams.iso -no-reboot -serial stdio -d int -D qemu.log
-
+	qemu-system-x86_64 -cdrom ams.iso -no-reboot -no-shutdown -serial stdio -d int,cpu_reset -D qemu.log
 clean:
 	rm -rf bin ams.iso iso_root
 	find src -name "*.o" -type f -delete

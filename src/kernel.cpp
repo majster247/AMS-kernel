@@ -85,7 +85,6 @@ void kmain(void) {
     
     print_serial("Keyboard IRQ unmasked, PIT timer masked!\n");
 
-    asm volatile("sti");
     print_serial("Interrupts enabled!\n");
 
     // Rysowanie promptu na ekranie

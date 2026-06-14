@@ -6,7 +6,7 @@ struct registers {
     uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
     uint64_t int_no, err_code;
     uint64_t rip, cs, rflags, rsp, ss;
-};
+}__attribute__((packed));
 
 // Wpis w IDT (16 bajtów w trybie 64-bitowym)
 struct idt_entry {
